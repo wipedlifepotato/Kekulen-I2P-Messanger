@@ -3,6 +3,13 @@ use regex::Regex;
 use std::io::prelude::*;
 use std::net::Shutdown;
 use std::io;
+
+use serde::{Serialize, Deserialize};
+use std::fs;
+use std::path::Path;
+use directories::ProjectDirs;
+use std::path::PathBuf;
+
 pub struct SAM{
     is_active: bool,
     t_stream: std::net::TcpStream,
@@ -16,14 +23,44 @@ pub struct SAM{
 //    std::time::Duration::new(30,0);
 const HANDSHAKE_MESSAGE: &str = "HELLO VERSION MIN=3.0\n";
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
 pub struct KeyPair {
     public: String,
     private: String,
 }
+
 impl KeyPair {
-    pub fn get_public(self: &Self) -> String {
+    pub fn get_app_dir() -> PathBuf {
+        if let Some(proj_dirs) = ProjectDirs::from("com", "wipedlifepotato", "Kekulen") {
+            let config_dir = proj_dirs.config_dir();
+            fs::create_dir_all(config_dir).expect("can't create directory");
+            return config_dir.to_path_buf();
+        }
+        PathBuf::from(".")
+    }
+
+    pub fn get_public(&self) -> String {
         self.public.clone()
+    }
+
+    pub fn save_to_file(&self, name: &str) -> std::io::Result<()> {
+        let filename = format!("{}.dat", name);
+        let file_path = Self::get_app_dir().join(filename);
+
+        let serialized = serde_json::to_string(self).expect("Serialize error");
+        fs::write(file_path, serialized)
+    }
+
+    pub fn load_from_file(name: &str) -> Option<Self> {
+        let filename = format!("{}.dat", name);
+        let file_path = Self::get_app_dir().join(filename);
+
+        if file_path.exists() {
+            let data = fs::read_to_string(file_path).ok()?;
+            serde_json::from_str(&data).ok()
+        } else {
+            None
+        }
     }
 }
 
