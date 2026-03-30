@@ -10,6 +10,12 @@ use std::path::Path;
 use directories::ProjectDirs;
 use std::path::PathBuf;
 
+use chacha20::ChaCha20;
+// Import relevant traits
+use chacha20::cipher::{KeyIvInit, StreamCipher, StreamCipherSeek};
+//use hex_literal::hex;
+
+
 pub struct SAM{
     is_active: bool,
     t_stream: std::net::TcpStream,
@@ -23,13 +29,22 @@ pub struct SAM{
 //    std::time::Duration::new(30,0);
 const HANDSHAKE_MESSAGE: &str = "HELLO VERSION MIN=3.0\n";
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Default)]
 pub struct KeyPair {
     public: String,
     private: String,
+    key: [u8; 32],
+    iv: [u8; 12],
 }
 
 impl KeyPair {
+    pub fn new(public: String, private: String) -> Self {
+        Self{public: public, private: private, ..Default::default()}
+    }
+    pub fn set_key(&mut self, key: [u8; 32], iv: [u8; 12]) {
+        self.iv = iv.clone();
+        self.key = key.clone();
+    }
     pub fn get_app_dir() -> PathBuf {
         if let Some(proj_dirs) = ProjectDirs::from("com", "wipedlifepotato", "Kekulen") {
             let config_dir = proj_dirs.config_dir();
@@ -48,17 +63,38 @@ impl KeyPair {
         let file_path = Self::get_app_dir().join(filename);
 
         let serialized = serde_json::to_string(self).expect("Serialize error");
-        fs::write(file_path, serialized)
+        if self.iv[0] != 0 && self.key[0] != 0{
+            let mut cipher = ChaCha20::new(&self.key.into(), &self.iv.into());
+            let mut buffer = serialized.into_bytes();
+            cipher.apply_keystream(&mut buffer);
+            return fs::write(file_path, buffer);
+        }
+        else {
+            fs::write(file_path, serialized)
+        }
     }
 
-    pub fn load_from_file(name: &str) -> Option<Self> {
+    pub fn load_from_file(&self, name: &str) -> Option<Self> {
         let filename = format!("{}.dat", name);
-        let file_path = Self::get_app_dir().join(filename);
+        let file_path = Self::get_app_dir().join(filename) ;//filename;
 
-        if file_path.exists() {
-            let data = fs::read_to_string(file_path).ok()?;
-            serde_json::from_str(&data).ok()
+        if /*file_path.exists()*/ true {
+            let data = fs::read(file_path).ok()?;
+            if self.iv[0] != 0 && self.key[0] != 0 {
+                let mut cipher = ChaCha20::new(&self.key.into(), &self.iv.into());
+                let mut buffer = data;
+                cipher.seek(0u32);
+                cipher.apply_keystream(&mut buffer);
+                if let Ok(json_str) = String::from_utf8(buffer) {
+                    return serde_json::from_str(&json_str).ok();
+                }
+                dbg!("can't decrypt");
+                return None;
+            }    
+               
+            serde_json::from_slice(&data).ok()
         } else {
+            dbg!("File not exists");
             None
         }
     }
@@ -201,7 +237,8 @@ impl SAM {
         match data {
             Some(Ok(x)) => {
                 let (public, private) = x;
-                return KeyPair{public: public.to_string(), private: private.to_string()};
+                return KeyPair{public: public.to_string(), 
+                    private: private.to_string(), ..Default::default()};
             },
             Some(Err(_)) => {
                 todo!("Can't get destgen data")
@@ -272,7 +309,7 @@ impl SAM {
         if _result != "OK" {
             todo!("can't create session logic");
         }
-        Self {is_active: true, t_stream: stream, version: _v, key_pair: KeyPair{private:String::new(),public:String::new()},is_master: false, nickname: String::new()}
+        Self {is_active: true, t_stream: stream, version: _v, key_pair: KeyPair{private:String::new(),public:String::new(), ..Default::default()},is_master: false, nickname: String::new()}
     }
 }
 }

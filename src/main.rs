@@ -1,11 +1,27 @@
 mod sam;
 mod tui;
-
+use mid;
 #[allow(unused_imports)]
 use sam::sam::{SAM,KeyPair};
+use argon2::Argon2;
 
 fn main() {
-    tui::run();
+    let mut key_pair = SAM::new("127.0.0.1", 7656).generate_dest(7) ;
+    let password = "super_password";
+    let mid_data = mid::get(password).unwrap();
+    let mut output_key_material = [0u8; 32];
+    let mut output_salt_material = [0u8; 12];
+    Argon2::default()
+    .hash_password_into(password.as_bytes(), mid_data.as_bytes(), &mut output_key_material).unwrap();
+    Argon2::default()
+    .hash_password_into(password.as_bytes(), mid_data.as_bytes(), &mut output_salt_material).unwrap();
+    key_pair.set_key(output_key_material, output_salt_material);
+    key_pair.save_to_file("test");
+    let p = key_pair.get_public();
+    assert_eq!(p,key_pair.load_from_file("test").expect("Can't load from file").get_public());
+    dbg!("key is ok");
+    return;
+  //  tui::run();
     /*
      /* ACCEPT EXAMPLE EC*HO BOT */
      let mut m = SAM::new("127.0.0.1", 7656);

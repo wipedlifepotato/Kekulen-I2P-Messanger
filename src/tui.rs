@@ -7,6 +7,10 @@ use cursive::view::Nameable;
 use cursive::view::Resizable;
 use std::fs;
 
+struct Friend {
+    name: String,
+    pub_key: String,
+}
 
 // by gemini modified
 fn create_account_dialog(s: &mut Cursive) {
@@ -89,8 +93,8 @@ pub fn run() {
 
     // by gemini modified
     let mut select = SelectView::<String>::new().on_submit(move |s, name: &str| {
-
-        let n = KeyPair::load_from_file(name).expect("Cant init keypair");
+        let k = KeyPair::new("".to_string(), "".to_string());
+        let n = k.load_from_file(name).expect("Cant init keypair");
 
         InitMessenger(s,n);
     });
