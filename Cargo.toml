@@ -9,3 +9,6 @@ regex = "1.12.3"
 serde_json = "1.0.149"
 serde = { version = "1.0.149", features = ["derive"] }
 directories = "6.0.0"
+chacha20 = "0.10.0"
+argon2 = "0.5.3"
+mid = "5.0.1"
