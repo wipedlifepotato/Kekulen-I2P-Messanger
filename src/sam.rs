@@ -78,7 +78,7 @@ impl KeyPair {
         let filename = format!("{}.dat", name);
         let file_path = Self::get_app_dir().join(filename) ;//filename;
 
-        if /*file_path.exists()*/ true {
+        if file_path.exists() {
             let data = fs::read(file_path).ok()?;
             if self.iv[0] != 0 && self.key[0] != 0 {
                 let mut cipher = ChaCha20::new(&self.key.into(), &self.iv.into());
