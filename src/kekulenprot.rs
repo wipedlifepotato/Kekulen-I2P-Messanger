@@ -1,11 +1,14 @@
 pub mod kekulenprot {
     use std::time;
-
+    use libcrux_ml_kem::{mlkem768, MlKemKeyPair};
+    use rand::prelude::*;
     #[allow(unused_imports)]
     use crate::sam::sam::*;
     use crate::config::config::AppConfig;
     use std::thread;
-
+    use chacha20poly1305::{ChaCha20Poly1305, Key, KeyInit, aead::{Aead, Payload}};
+    use sha2::Sha256;
+    use hkdf::Hkdf;
     struct SamSession {
         session: SAM,
         keyPair: KeyPair,
@@ -49,7 +52,6 @@ pub mod kekulenprot {
     struct Friend {
         pub_key: String,
         name: String,
- 
     }
     use std::sync::{Arc, Mutex};
     pub struct Protocol {
@@ -76,7 +78,7 @@ pub mod kekulenprot {
         pub fn connect_thread(&self) {
             let session_ptr = Arc::clone(&self.session);
             let friends_ptr = Arc::clone(&self.friends);
-
+            
             thread::spawn(move || {
                 loop {
                     let friends_list = {
@@ -100,6 +102,42 @@ pub mod kekulenprot {
                             sam.set_nickname(&nickname);
                             
                             if sam.connect(&pub_key) {
+                                let mut seed = [0u8; 64];
+                                let mut rng = thread_rng();
+                                rng.fill_bytes(&mut seed);
+                                let key_pair = mlkem768::generate_key_pair(seed);
+                                sam.write_bytes(key_pair.public_key().as_slice());
+                                let ciphertext = match sam.read_bytes(1088) {
+                                    Ok(e) => {
+                                        e
+                                    }, Err(e) => {
+                                        eprintln!("{}",e);
+                                        return;
+                                    }
+                                };
+                                let ct_array: [u8; 1088] = ciphertext.try_into()
+                                    .expect("CT unknown");
+
+                                let ct_struct = libcrux_ml_kem::mlkem768::MlKem768Ciphertext::from(ct_array);
+
+                                let shared_secret = mlkem768::decapsulate(
+                                    key_pair.private_key(),
+                                    &ct_struct 
+                                );
+                                let key_bytes: &[u8] = shared_secret.as_slice(); 
+
+                                // 1. Инициализируем HKDF
+                                let ikm = shared_secret.as_slice();
+                                let hk = Hkdf::<Sha256>::new(None, ikm);
+
+                                // 2. Генерируем два РАЗНЫХ ключа по 32 байта
+                                let mut send_key = [0u8; 32];
+                                let mut recv_key = [0u8; 32];
+
+                                hk.expand(b"Kekulen-v1-Send-Key", &mut send_key).expect("HKDF failed");
+                                hk.expand(b"Kekulen-v1-Recv-Key", &mut recv_key).expect("HKDF failed");
+                                let send_cipher = ChaCha20Poly1305::new(Key::from_slice(&send_key));
+                                let recv_cipher = ChaCha20Poly1305::new(Key::from_slice(&recv_key));
                                 todo!("logic");
                             }
                         });

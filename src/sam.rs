@@ -123,6 +123,34 @@ impl SAM {
     pub fn write_string(self: &mut Self, msg: String) -> Result<(), io::Error> {
         return self.write(msg);
     }
+    pub fn write_bytes<T: AsRef<[u8]>>(&mut self, msg: T) -> Result<(), io::Error> {
+        let bytes = msg.as_ref();
+        let expected_len = bytes.len();
+
+        match self.t_stream.write_all(bytes) {
+            Err(e) => {
+                self.is_active = false;
+                eprintln!("write error: {:?}", e);
+                Err(e)
+            },
+            Ok(_) => {
+                self.t_stream.flush()?; 
+                Ok(())
+            }
+        }
+    }
+    pub fn read_bytes(&mut self, len: usize) -> Result<Vec<u8>, io::Error> {
+        let mut buf = vec![0u8; len];
+
+        match self.t_stream.read_exact(&mut buf) {
+            Ok(_) => Ok(buf),
+            Err(e) => {
+                self.is_active = false;
+                eprintln!("read error (expected {} bytes): {:?}", len, e);
+                Err(e)
+            }
+        }
+    }
     fn write(self: & mut Self, msg: String) -> Result<(), io::Error> {
         let counter = msg.len();
         match self.t_stream.write(msg.as_bytes()) {
