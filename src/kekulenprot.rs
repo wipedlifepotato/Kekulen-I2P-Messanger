@@ -102,6 +102,8 @@ pub mod kekulenprot {
                             sam.set_nickname(&nickname);
                             
                             if sam.connect(&pub_key) {
+                                // TODO: check if our friend?
+                                todo!("logic");
                                 let mut seed = [0u8; 64];
                                 let mut rng = thread_rng();
                                 rng.fill_bytes(&mut seed);
@@ -126,11 +128,9 @@ pub mod kekulenprot {
                                 );
                                 let key_bytes: &[u8] = shared_secret.as_slice(); 
 
-                                // 1. Инициализируем HKDF
                                 let ikm = shared_secret.as_slice();
                                 let hk = Hkdf::<Sha256>::new(None, ikm);
 
-                                // 2. Генерируем два РАЗНЫХ ключа по 32 байта
                                 let mut send_key = [0u8; 32];
                                 let mut recv_key = [0u8; 32];
 
