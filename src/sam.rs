@@ -36,10 +36,14 @@ pub struct KeyPair {
     key: [u8; 32],
     iv: [u8; 12],
 }
-
+use mid;
+use argon2::Argon2;
 impl KeyPair {
     pub fn new(public: String, private: String) -> Self {
         Self{public: public, private: private, ..Default::default()}
+    }
+    pub fn dummy() -> Self {
+        Self { ..Default::default() }
     }
     pub fn set_key(&mut self, key: [u8; 32], iv: [u8; 12]) {
         self.iv = iv.clone();
@@ -57,7 +61,16 @@ impl KeyPair {
     pub fn get_public(&self) -> String {
         self.public.clone()
     }
-
+    pub fn set_password(&mut self, password: &str) {
+                let mid_data = mid::get(password).unwrap();
+                let mut output_key_material = [0u8; 32];
+                let mut output_salt_material = [0u8; 12];
+                Argon2::default()
+                .hash_password_into(password.as_bytes(), mid_data.as_bytes(), &mut output_key_material).unwrap();
+                Argon2::default()
+                .hash_password_into(password.as_bytes(), mid_data.as_bytes(), &mut output_salt_material).unwrap();
+                self.set_key(output_key_material, output_salt_material);
+    }
     pub fn save_to_file(&self, name: &str) -> std::io::Result<()> {
         let filename = format!("{}.dat", name);
         let file_path = Self::get_app_dir().join(filename);
