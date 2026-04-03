@@ -9,14 +9,23 @@ pub mod config {
         pub host_sam: String,
         pub port_sam: u16,
     }
-
+    use clap::Parser;
+    #[derive(Parser)]
+    struct Args {
+        #[arg(short, long, default_value = "config.yaml")]
+        config: String,
+    }
     impl AppConfig {
         pub fn is_exists(path: &str) -> bool {
             return fs::metadata(path).is_ok();
         }
-        pub fn new(path: &str) -> AppConfig {
+        pub fn load() -> Self {
+            let args = Args::parse();
+            return Self::new(&args.config);            
+        }
+        pub fn new(path: &str) -> Self {
             if !fs::metadata(path).is_ok() {
-                let default_config = AppConfig {
+                let default_config = Self {
                     host_sam: "127.0.0.1".to_string(),
                     port_sam: 7656,
                 };

@@ -143,12 +143,21 @@ impl SAM {
         self.key_pair = k;
     }
     // TODO: test
-    pub fn close_session(self: &mut Self, nickname: &str) {
+    pub fn close_session(self: &mut Self, raw_nickname: &str) {
+        let nickname = Path::new(raw_nickname)
+            .file_name()
+            .and_then(|os_str| os_str.to_str())
+            .unwrap_or("");
+
         self.write(format!("SESSION REMOVE ID={}\n", nickname)).expect("cant close session");
         //let mut buffer = ;
         let _= self.t_stream.read(&mut [0u8; 2056]);
     }
-    pub fn create_session(self: &mut Self, nickname: &str) -> bool {
+    pub fn create_session(self: &mut Self, raw_nickname: &str) -> bool {
+        let nickname = Path::new(raw_nickname)
+            .file_name()
+            .and_then(|os_str| os_str.to_str())
+            .unwrap_or("");
         if self.is_master {
             eprintln!("before created session");
             return false;
@@ -160,6 +169,7 @@ impl SAM {
         } else {
             privkey = self.key_pair.private.clone();
         }
+
         self.write(format!("SESSION CREATE STYLE=STREAM ID={} DESTINATION={}\n", nickname, privkey)).expect("cant create session");
         let mut buffer = [0u8; 2056];
         let _= self.t_stream.read(&mut buffer);
@@ -176,6 +186,9 @@ impl SAM {
         self.nickname = String::from(nickname);
         dbg!(&caps[0]);
         return false;
+    }
+    pub fn get_nickname(&self) -> String {
+        self.nickname.clone()
     }
     pub fn connect(self: &mut Self, destination: &str) -> bool{
         if self.is_master {
