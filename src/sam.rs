@@ -15,7 +15,7 @@ use chacha20::ChaCha20;
 use chacha20::cipher::{KeyIvInit, StreamCipher, StreamCipherSeek};
 //use hex_literal::hex;
 
-
+#[derive(Debug)]
 pub struct SAM{
     is_active: bool,
     t_stream: std::net::TcpStream,
@@ -31,7 +31,9 @@ const HANDSHAKE_MESSAGE: &str = "HELLO VERSION MIN=3.0\n";
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, Default)]
 pub struct KeyPair {
+    #[serde(rename = "public")]
     public: String,
+    #[serde(rename = "private")]
     private: String,
     key: [u8; 32],
     iv: [u8; 12],
@@ -72,10 +74,12 @@ impl KeyPair {
                 self.set_key(output_key_material, output_salt_material);
     }
     pub fn save_to_file(&self, name: &str) -> std::io::Result<()> {
+        dbg!("save_to_file");
         let filename = format!("{}.dat", name);
         let file_path = Self::get_app_dir().join(filename);
-
+        dbg!("save", &file_path);
         let serialized = serde_json::to_string(self).expect("Serialize error");
+        dbg!(&serialized);
         if self.iv[0] != 0 && self.key[0] != 0{
             let mut cipher = ChaCha20::new(&self.key.into(), &self.iv.into());
             let mut buffer = serialized.into_bytes();
@@ -87,24 +91,37 @@ impl KeyPair {
         }
     }
 
-    pub fn load_from_file(&self, name: &str) -> Option<Self> {
+    pub fn load_from_file(&mut self, name: &str) -> Option<Self> {
         let filename = format!("{}.dat", name);
         let file_path = Self::get_app_dir().join(filename) ;//filename;
-
+        dbg!("load from file");
         if file_path.exists() {
             let data = fs::read(file_path).ok()?;
+            dbg!(&data);
             if self.iv[0] != 0 && self.key[0] != 0 {
                 let mut cipher = ChaCha20::new(&self.key.into(), &self.iv.into());
                 let mut buffer = data;
                 cipher.seek(0u32);
                 cipher.apply_keystream(&mut buffer);
                 if let Ok(json_str) = String::from_utf8(buffer) {
-                    return serde_json::from_str(&json_str).ok();
+                    dbg!(&json_str);
+                         match serde_json::from_str::<KeyPair>(&json_str) {
+                        Ok(kp) => {
+                            self.public = kp.public.clone();
+                            self.private = kp.private.clone();
+                            return Some(kp);
+                        },
+                        Err(e) => {
+                            eprintln!("!!! SERDE В SAM.RS: {}", e);
+                            eprintln!("line: {}, column: {}", e.line(), e.column());
+                            return None;
+                        }
+                    }
                 }
                 dbg!("can't decrypt");
                 return None;
             }    
-               
+            
             serde_json::from_slice(&data).ok()
         } else {
             dbg!("File not exists");
@@ -168,6 +185,7 @@ impl SAM {
         Ok(())
     }
     pub fn set_keypair(self: &mut Self, k: KeyPair) {
+        dbg!("set key_pair", &k);
         self.key_pair = k;
     }
     // TODO: test
@@ -197,12 +215,14 @@ impl SAM {
         } else {
             privkey = self.key_pair.private.clone();
         }
-
+        dbg!(&self.key_pair);
+        dbg!(&privkey);
         self.write(format!("SESSION CREATE STYLE=STREAM ID={} DESTINATION={}\n", nickname, privkey)).expect("cant create session");
         let mut buffer = [0u8; 2056];
         let _= self.t_stream.read(&mut buffer);
         let line = String::from_utf8_lossy(&buffer);
         let re = Regex::new(r"SESSION STATUS RESULT=(\w+) DESTINATION=.+").expect("cant compile regex");
+        dbg!(&line);
         let caps = re.captures(&line).unwrap();
         if caps.len() == 1 {
             return false;
@@ -266,6 +286,14 @@ impl SAM {
             }
         }
         return String::from_utf8_lossy(&buffer).to_string();
+    }
+    pub fn set_timeout(&mut self, seconds: u64) -> Result<(), Box<dyn std::error::Error>> {
+        if seconds == 0 {
+            self.t_stream.set_read_timeout(None)?;
+        } else {
+            self.t_stream.set_read_timeout(Some(std::time::Duration::from_secs(seconds)))?;
+        }
+        Ok(())
     }
     pub fn set_nickname(self: &mut Self, nick: &str) {
         self.nickname = String::from(nick);

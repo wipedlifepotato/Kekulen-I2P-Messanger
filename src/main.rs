@@ -1,53 +1,41 @@
+use std::sync::Arc;
+use clap::Parser;
+
 mod sam;
 mod tui;
 mod config;
 mod kekulenprot;
+mod api; 
 
-#[allow(unused_imports)]
-use sam::sam::{SAM,KeyPair};
-use kekulenprot::*;
-fn main() {
-//    key_pair.save_to_file("test");
-//    let p = key_pair.get_public();
-//    assert_eq!(p,key_pair.load_from_file("test").expect("Can't load from file").get_public());
-//    dbg!("key is ok");
-//    return;
-  //  tui::run();
-    /*
-     /* ACCEPT EXAMPLE EC*HO BOT */
-     let mut m = SAM::new("127.0.0.1", 7656);
-     let key_pair = SAM::new("127.0.0.1", 7656).generate_dest(7) ;
-     dbg!(&key_pair);
-     m.set_keypair( key_pair );
-     m.create_session("test2");
-     loop {
-     dbg!("Accept");
-     let mut accept = SAM::new("127.0.0.1", 7656);
-     accept.set_nickname("test2");
-     accept.accept();
-     dbg!("read data");
-     let incoming = accept.read_str();
-     println!("New incoming connection with {}", incoming);
-     while accept.isactive() {
-         accept.write_str("HELLO ECHO");
-         let ndata = accept.read_str();
-         accept.write_string(ndata);
-}
+use crate::kekulenprot::Protocol;
+use crate::config::config::Args;
 
+use crate::config::config::AppConfig;
+use std::path::PathBuf;
 
-}
-//let mut m1 = SAM::new("127.0.0.1", 7656);
-//m1.set_nickname("test");
-//m1.connect("");
-*/
-     let mut m = SAM::new("127.0.0.1", 7656);
-     m.create_session("test");
-     let mut m1 = SAM::new("127.0.0.1", 7656);
-     m1.set_nickname("test");
-     if ! m1.connect("UeAnMVIMYaq2-uwy6dlZuoXYL4CZKKakwFPY~EDX5LNR4CcxUgxhqrb67DLp2Vm6hdgvgJkopqTAU9j8QNfks1HgJzFSDGGqtvrsMunZWbqF2C-AmSimpMBT2PxA1-SzUeAnMVIMYaq2-uwy6dlZuoXYL4CZKKakwFPY~EDX5LNR4CcxUgxhqrb67DLp2Vm6hdgvgJkopqTAU9j8QNfks1HgJzFSDGGqtvrsMunZWbqF2C-AmSimpMBT2PxA1-SzUeAnMVIMYaq2-uwy6dlZuoXYL4CZKKakwFPY~EDX5LNR4CcxUgxhqrb67DLp2Vm6hdgvgJkopqTAU9j8QNfks1HgJzFSDGGqtvrsMunZWbqF2C-AmSimpMBT2PxA1-SzUeAnMVIMYaq2-uwy6dlZuoXYL4CZKKakwFPY~EDX5LNR4CcxUgxhqrb67DLp2Vm6hdgvgJkopqTAU9j8QNfks-VxQAoODnyWOrGG-BrnE2YgoqkoYJK5IFFUfUN0UcboBQAEAAcAAA==")
-     {
-         todo!("can't connect");
-     }
-     m1.write_string("GET / HTTP/1.1\r\n\r\n\r\n".to_string());
-     dbg!(m1.read_str());
+#[tokio::main]
+async fn main() {
+    let args = Args::parse();
+    let app_dir = AppConfig::get_app_dir();
+    
+    let full_file_name = format!("{}.dat", args.dat_file);
+    
+    let mut dat_path = std::path::PathBuf::from(app_dir);
+    dat_path.push(&full_file_name);
+    
+    let dat_path_str = dat_path.to_string_lossy().to_string();
+    dbg!(&dat_path_str);
+    let protocol = if dat_path.exists() {
+        println!("Loading: {}", dat_path_str);
+        Arc::new(Protocol::load_profile(&args.dat_file.as_str(), &args.password))
+    } else {
+        println!("Creating: {}", dat_path_str);
+        Arc::new(Protocol::create_profile(&args.dat_file.as_str(), &args.password, 7))
+    };
+
+    protocol.connect_thread();
+    protocol.accept_thread();
+
+    let server = api::ApiServer::new(Arc::clone(&protocol));
+    server.run(args.port).await;
 }

@@ -11,13 +11,26 @@ pub mod config {
     }
     use clap::Parser;
     #[derive(Parser)]
-    struct Args {
+    pub struct Args {
         #[arg(short, long, default_value = "config.yaml")]
-        config: String,
+        pub config: String,
+
+        #[arg(short, long, default_value = "my.dat")]
+        pub dat_file: String,
+
+        #[arg(short, long, default_value_t = 8080)]
+        pub port: u16,
+
+        #[arg(long, default_value = "password")]
+        pub password: String,
     }
     impl AppConfig {
         pub fn is_exists(path: &str) -> bool {
-            return fs::metadata(path).is_ok();
+            let app_dir = AppConfig::get_app_dir();
+            let mut dat_path = std::path::PathBuf::from(app_dir);
+            dat_path.push(&path);
+            dbg!(&dat_path);
+            return fs::metadata(dat_path).is_ok();
         }
         pub fn load() -> Self {
             let args = Args::parse();
