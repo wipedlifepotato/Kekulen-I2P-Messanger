@@ -25,6 +25,9 @@ utoipa = { version = "5.4", features = ["axum_extras"] }
 utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
 tower-http = {version="0.6.8", features=["fs"]}
 hostname = "0.4.2"
+jni = "0.21.1"
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 mid = "5.0.1"
