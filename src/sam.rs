@@ -38,6 +38,7 @@ pub struct KeyPair {
     key: [u8; 32],
     iv: [u8; 12],
 }
+#[cfg(not(target_os = "android"))]
 use mid;
 use argon2::Argon2;
 impl KeyPair {
@@ -64,11 +65,16 @@ impl KeyPair {
         self.public.clone()
     }
     pub fn set_password(&mut self, password: &str) {
+                #[cfg(not(target_os = "android"))]
                 let mid_data = mid::get(password).unwrap_or_else(|_| {
                     let user = std::env::var("USER").or_else(|_| std::env::var("USERNAME")).unwrap_or_default();
                     let host = hostname::get().map(|h| h.to_string_lossy().into_owned()).unwrap_or_default();
                     format!("{}-{}", user, host)
                 });
+
+                #[cfg(target_os = "android")]
+                let mid_data = format!("android-{}", password);
+
                 let mut output_key_material = [0u8; 32];
                 let mut output_salt_material = [0u8; 12];
                 Argon2::default()
