@@ -7,25 +7,53 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use crate::kekulenprot::Protocol;
 use crate::config::config::AppConfig; 
+use utoipa::{OpenApi, ToSchema};
+use utoipa_swagger_ui::SwaggerUi;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct AddFriendRequest {
+    /// Public key of the friend to add
     pub pub_key: String,
+    /// Display name for the friend
     pub name: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub struct SendMessageRequest {
+    /// Message text to send
     pub message: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub struct FriendResponse {
     pub pub_key: String,
     pub name: String,
     pub messages: Vec<String>,
     pub send_count: u64,
 }
+
+#[derive(Serialize, ToSchema)]
+pub struct MyInfoResponse {
+    pub pub_key: String,
+}
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        get_friends,
+        add_friend,
+        get_messages,
+        send_message,
+        get_my_info
+    ),
+    components(
+        schemas(AddFriendRequest, SendMessageRequest, FriendResponse, MyInfoResponse)
+    ),
+    tags(
+        (name = "Kekulen", description = "P2P Messenger over I2P")
+    )
+)]
+struct ApiDoc;
 
 pub struct ApiServer {
     protocol: Arc<Protocol>,
@@ -37,21 +65,32 @@ impl ApiServer {
     }
 
     pub async fn run(self, port: u16) {
+        
         let app = Router::new()
             .route("/friends", get(get_friends))
             .route("/friends/add", post(add_friend))
             .route("/messages/{pub_key}", get(get_messages))
             .route("/send/{pub_key}", post(send_message))
             .route("/me", get(get_my_info))
-            .with_state(self.protocol);
+            .with_state(self.protocol)
+            .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()));
 
         let addr = format!("127.0.0.1:{}", port);
         let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
         println!("REST API started on http://{}", addr);
+        println!("Swagger UI available at http://{}/swagger-ui", addr);
+        
         axum::serve(listener, app).await.unwrap();
     }
 }
 
+#[utoipa::path(
+    get,
+    path = "/me",
+    responses(
+        (status = 200, description = "Get own public key", body = MyInfoResponse)
+    )
+)]
 async fn get_my_info(
     State(protocol): State<Arc<Protocol>>,
 ) -> Json<serde_json::Value> {
@@ -60,6 +99,13 @@ async fn get_my_info(
     }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/friends",
+    responses(
+        (status = 200, description = "List all registered friends", body = [FriendResponse])
+    )
+)]
 async fn get_friends(
     State(protocol): State<Arc<Protocol>>,
 ) -> Json<Vec<FriendResponse>> {
@@ -76,6 +122,14 @@ async fn get_friends(
     Json(response)
 }
 
+#[utoipa::path(
+    post,
+    path = "/friends/add",
+    request_body = AddFriendRequest,
+    responses(
+        (status = 200, description = "Friend added and handshake initiated")
+    )
+)]
 async fn add_friend(
     State(protocol): State<Arc<Protocol>>,
     Json(payload): Json<AddFriendRequest>,
@@ -108,6 +162,16 @@ async fn add_friend(
     Json(serde_json::json!({ "status": "ok", "message": "Friend added" }))
 }
 
+#[utoipa::path(
+    get,
+    path = "/messages/{pub_key}",
+    params(
+        ("pub_key" = String, Path, description = "Friend's public key")
+    ),
+    responses(
+        (status = 200, description = "Message history for the friend")
+    )
+)]
 async fn get_messages(
     State(protocol): State<Arc<Protocol>>,
     Path(pub_key): Path<String>,
@@ -125,6 +189,17 @@ async fn get_messages(
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/send/{pub_key}",
+    params(
+        ("pub_key" = String, Path, description = "Recipient's public key")
+    ),
+    request_body = SendMessageRequest,
+    responses(
+        (status = 200, description = "Message queued/sent")
+    )
+)]
 async fn send_message(
     State(protocol): State<Arc<Protocol>>,
     Path(pub_key): Path<String>,
