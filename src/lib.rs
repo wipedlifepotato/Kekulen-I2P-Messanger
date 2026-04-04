@@ -6,8 +6,10 @@ use std::sync::{Arc, OnceLock};
 pub mod sam;
 pub mod config;
 pub mod kekulenprot;
+mod api;
 
 use crate::kekulenprot::Protocol;
+use crate::api::*;
 
 static PROTOCOL: OnceLock<Arc<Protocol>> = OnceLock::new();
 
@@ -34,7 +36,16 @@ pub extern "system" fn Java_com_kekulen_app_ProtocolBridge_initProtocol(
         p_clone2.connect_thread(); 
     });
 
+    let p_clone3 = Arc::clone(&proto_arc);
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+        rt.block_on(async {
+            let server = api::ApiServer::new(Arc::clone(&p_clone3));
+            server.run(8384).await
+        });
+    });
     let _ = PROTOCOL.set(proto_arc);
+
 }
 
 #[unsafe(no_mangle)]
