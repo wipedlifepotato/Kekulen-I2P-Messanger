@@ -3,6 +3,7 @@
 <head>
     <title>Kekulen PQC Messenger</title>
     <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
     <style>
         :root { --bg: #121212; --card: #1e1e1e; --accent: #00ff9d; --text: #e0e0e0; --error: #ff4444; }
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; }
@@ -73,19 +74,20 @@
             friendsData = await response.json();
             const list = document.getElementById('friends_list');
             list.innerHTML = '';
-
-            friendsData.forEach(f => {
-                const div = document.createElement('div');
-                div.className = `friend-card ${f.is_active ? 'active' : ''} ${currentFriend === f.pub_key ? 'selected' : ''}`;
-                div.onclick = () => selectFriend(f.pub_key);
+	    friendsData.forEach(f => {
+               const div = document.createElement('div');
+               div.className = `friend-card ${f.is_active ? 'active' : ''} ${currentFriend === f.pub_key ? 'selected' : ''}`;
+               div.onclick = () => selectFriend(f.pub_key);
                 
-                div.innerHTML = `
-                    ${f.key_exchanged ? '<span class="pqc-badge">ML-KEM</span>' : ''}
-                    <div><span class="indicator"></span><strong>${f.name}</strong></div>
-                    <div style="font-size:0.75em; color:#666; overflow:hidden; text-overflow:ellipsis">${f.pub_key.substring(0,32)}...</div>
-                `;
-                list.appendChild(div);
-            });
+               div.innerHTML = `
+                   ${f.key_exchanged ? '<span class="pqc-badge">ML-KEM</span>' : ''}
+                   <div><span class="indicator"></span><strong>${escapeHtml(f.name)}</strong></div>
+                   <div style="font-size:0.75em; color:#666; overflow:hidden; text-overflow:ellipsis">
+                       ${escapeHtml(f.pub_key.substring(0,32))}...
+                   </div>
+               `;
+               list.appendChild(div);
+           });
 
             if (currentFriend) renderMessages();
         } catch (e) { console.error("Poll error", e); }
@@ -96,23 +98,31 @@
         loadFriends();
     }
 
-    function renderMessages() {
-        const friend = friendsData.find(f => f.pub_key === currentFriend);
-        if (!friend) return;
-
-        const msgDiv = document.getElementById('messages');
-        msgDiv.innerHTML = '';
-        
-        friend.messages.forEach(m => {
-            const isMe = m.startsWith("Me: ");
-            const text = isMe ? m.replace("Me: ", "") : m;
-            const d = document.createElement('div');
-            d.className = `msg ${isMe ? 'me' : 'them'}`;
-            d.innerText = text;
-            msgDiv.appendChild(d);
-        });
-        msgDiv.scrollTop = msgDiv.scrollHeight;
+    function escapeHtml(str) {
+    	const div = document.createElement('div');
+    	div.textContent = str;
+    	return div.innerHTML;
     }
+
+    function renderMessages() {
+       const friend = friendsData.find(f => f.pub_key === currentFriend);
+       if (!friend) return;
+
+       const msgDiv = document.getElementById('messages');
+       msgDiv.innerHTML = ''; 
+        
+       friend.messages.forEach(m => {
+           const isMe = m.startsWith("Me: ");
+           const text = isMe ? m.replace("Me: ", "") : m;
+           const d = document.createElement('div');
+           d.className = `msg ${isMe ? 'me' : 'them'}`;
+           
+           d.textContent = text; 
+           
+           msgDiv.appendChild(d);
+       });
+       msgDiv.scrollTop = msgDiv.scrollHeight;
+   }
 
     async function sendMessage() {
         const input = document.getElementById('msg_input');
