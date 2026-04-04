@@ -93,8 +93,8 @@ pub fn run() {
 
     // by gemini modified
     let mut select = SelectView::<String>::new().on_submit(move |s, name: &str| {
-        let k = KeyPair::new("".to_string(), "".to_string());
-        let n = k.load_from_file(name).expect("Cant init keypair");
+        let mut k = KeyPair::new("".to_string(), "".to_string());
+        let mut n = k.load_from_file(name).expect("Cant init keypair");
 
         InitMessenger(s,n);
     });
