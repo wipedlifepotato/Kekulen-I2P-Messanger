@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Kekulen PQC Messenger</title>
+    <meta charset="utf-8" />
+    <style>
+        :root { --bg: #121212; --card: #1e1e1e; --accent: #00ff9d; --text: #e0e0e0; --error: #ff4444; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; height: 100vh; }
+        
+        #sidebar { width: 350px; border-right: 1px solid #333; display: flex; flex-direction: column; background: #181818; }
+        .header { padding: 20px; border-bottom: 1px solid #333; }
+        .add-form { padding: 15px; border-bottom: 1px solid #333; font-size: 0.9em; }
+        .add-form input { width: 90%; margin-bottom: 10px; background: #121212; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px; }
+        
+        #friends_list { flex-grow: 1; overflow-y: auto; }
+        .friend-card { padding: 15px; border-bottom: 1px solid #222; cursor: pointer; transition: 0.2s; position: relative; }
+        .friend-card:hover { background: #252525; }
+        .friend-card.selected { background: #2a2a2a; border-right: 3px solid var(--accent); }
+        
+        .indicator { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; background: #444; }
+        .active .indicator { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+        .pqc-badge { font-size: 0.7em; background: #004422; color: var(--accent); padding: 2px 6px; border-radius: 4px; float: right; }
+
+        #chat_window { flex-grow: 1; display: flex; flex-direction: column; background: var(--bg); }
+        #messages { flex-grow: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .msg { max-width: 70%; padding: 10px 15px; border-radius: 15px; font-size: 0.95em; line-height: 1.4; }
+        .msg.me { align-self: flex-end; background: #005c4b; color: white; border-bottom-right-radius: 2px; }
+        .msg.them { align-self: flex-start; background: #333; border-bottom-left-radius: 2px; }
+        
+        #input_area { padding: 20px; background: #1e1e1e; display: flex; gap: 10px; }
+        #msg_input { flex-grow: 1; background: #121212; border: 1px solid #444; color: white; padding: 12px; border-radius: 8px; }
+        button { background: var(--accent); border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <div class="header">
+        <h2 style="margin:0; color:var(--accent)">Kekulen</h2>
+        <small id="my_pk" style="color:#666; font-size: 0.7em; display:block; margin-top:5px; word-break:break-all">Loading key...</small>
+    </div>
+    <div class="add-form">
+        <input type="text" id="new_name" placeholder="Friend Name">
+        <input type="text" id="new_pubkey" placeholder="I2P Destination">
+        <button onclick="addFriend()" style="width:100%">Add Friend</button>
+    </div>
+    <div id="friends_list"></div>
+</div>
+
+<div id="chat_window">
+    <div id="messages">
+        <p style="text-align:center; color:#555; margin-top:100px;">Select a friend to start chatting</p>
+    </div>
+    <div id="input_area">
+        <input type="text" id="msg_input" placeholder="Type a message..." onkeypress="if(event.key==='Enter') sendMessage()">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+</div>
+
+<script>
+    let currentFriend = null;
+    let friendsData = [];
+
+    async function loadMyKey() {
+        const r = await fetch('/api/me');
+        const data = await r.json();
+        document.getElementById('my_pk').innerText = "My ID: " + data.pub_key;
+    }
+
+    async function loadFriends() {
+        try {
+            const response = await fetch('/api/friends');
+            friendsData = await response.json();
+            const list = document.getElementById('friends_list');
+            list.innerHTML = '';
+
+            friendsData.forEach(f => {
+                const div = document.createElement('div');
+                div.className = `friend-card ${f.is_active ? 'active' : ''} ${currentFriend === f.pub_key ? 'selected' : ''}`;
+                div.onclick = () => selectFriend(f.pub_key);
+                
+                div.innerHTML = `
+                    ${f.key_exchanged ? '<span class="pqc-badge">ML-KEM</span>' : ''}
+                    <div><span class="indicator"></span><strong>${f.name}</strong></div>
+                    <div style="font-size:0.75em; color:#666; overflow:hidden; text-overflow:ellipsis">${f.pub_key.substring(0,32)}...</div>
+                `;
+                list.appendChild(div);
+            });
+
+            if (currentFriend) renderMessages();
+        } catch (e) { console.error("Poll error", e); }
+    }
+
+    function selectFriend(pubKey) {
+        currentFriend = pubKey;
+        loadFriends();
+    }
+
+    function renderMessages() {
+        const friend = friendsData.find(f => f.pub_key === currentFriend);
+        if (!friend) return;
+
+        const msgDiv = document.getElementById('messages');
+        msgDiv.innerHTML = '';
+        
+        friend.messages.forEach(m => {
+            const isMe = m.startsWith("Me: ");
+            const text = isMe ? m.replace("Me: ", "") : m;
+            const d = document.createElement('div');
+            d.className = `msg ${isMe ? 'me' : 'them'}`;
+            d.innerText = text;
+            msgDiv.appendChild(d);
+        });
+        msgDiv.scrollTop = msgDiv.scrollHeight;
+    }
+
+    async function sendMessage() {
+        const input = document.getElementById('msg_input');
+        const msg = input.value;
+        if (!msg || !currentFriend) return;
+
+        input.value = '';
+        await fetch(`/api/send/${currentFriend}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ message: msg })
+        });
+        loadFriends();
+    }
+
+    async function addFriend() {
+        const name = document.getElementById('new_name').value;
+        const pub_key = document.getElementById('new_pubkey').value;
+        await fetch('/api/friends/add', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ name, pub_key })
+        });
+        loadFriends();
+    }
+
+    loadMyKey();
+    loadFriends();
+    setInterval(loadFriends, 3000);
+</script>
+
+</body>
+</html>

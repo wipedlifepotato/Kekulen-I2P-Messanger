@@ -9,6 +9,7 @@ use crate::kekulenprot::Protocol;
 use crate::config::config::AppConfig; 
 use utoipa::{OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
+use tower_http::services::ServeDir;
 
 #[derive(Deserialize, ToSchema)]
 pub struct AddFriendRequest {
@@ -66,15 +67,22 @@ impl ApiServer {
 
     pub async fn run(self, port: u16) {
         
-        let app = Router::new()
+        let api_routes = Router::new()
             .route("/friends", get(get_friends))
             .route("/friends/add", post(add_friend))
             .route("/messages/{pub_key}", get(get_messages))
             .route("/send/{pub_key}", post(send_message))
             .route("/me", get(get_my_info))
-            .with_state(self.protocol)
-            .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()));
+            .with_state(self.protocol);
 
+        let serve_dir = ServeDir::new("server")
+            .append_index_html_on_directories(true);
+
+        let app = Router::new()
+            .nest("/api", api_routes) 
+            .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
+            .fallback_service(serve_dir); 
+                                           
         let addr = format!("127.0.0.1:{}", port);
         let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
         println!("REST API started on http://{}", addr);
