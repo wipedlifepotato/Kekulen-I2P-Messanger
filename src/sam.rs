@@ -64,7 +64,11 @@ impl KeyPair {
         self.public.clone()
     }
     pub fn set_password(&mut self, password: &str) {
-                let mid_data = mid::get(password).unwrap();
+                let mid_data = mid::get(password).unwrap_or_else(|_| {
+                    let user = std::env::var("USER").or_else(|_| std::env::var("USERNAME")).unwrap_or_default();
+                    let host = hostname::get().map(|h| h.to_string_lossy().into_owned()).unwrap_or_default();
+                    format!("{}-{}", user, host)
+                });
                 let mut output_key_material = [0u8; 32];
                 let mut output_salt_material = [0u8; 12];
                 Argon2::default()
