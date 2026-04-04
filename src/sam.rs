@@ -259,7 +259,8 @@ impl SAM {
         let mut buffer1 = [0u8; 25];
         let _= self.t_stream.read(&mut buffer1);
         let line = String::from_utf8_lossy(&buffer1);
-        if "STREAM STATUS RESULT=OK" != line {
+        dbg!(&line);
+        if "STREAM STATUS RESULT=OK\n\0" != line {
             return false;
         }
         let mut buffer = [0u8; 2056];

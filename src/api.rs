@@ -42,6 +42,7 @@ impl ApiServer {
             .route("/friends/add", post(add_friend))
             .route("/messages/{pub_key}", get(get_messages))
             .route("/send/{pub_key}", post(send_message))
+            .route("/me", get(get_my_info))
             .with_state(self.protocol);
 
         let addr = format!("127.0.0.1:{}", port);
@@ -52,7 +53,13 @@ impl ApiServer {
 }
 
 // --- Обработчики (Handlers) ---
-
+async fn get_my_info(
+    State(protocol): State<Arc<Protocol>>,
+) -> Json<serde_json::Value> {
+    Json(serde_json::json!({
+        "pub_key": protocol.get_my_public_key()
+    }))
+}
 /// Получить список всех друзей
 async fn get_friends(
     State(protocol): State<Arc<Protocol>>,
@@ -90,12 +97,14 @@ async fn add_friend(
     
     friends.push(crate::kekulenprot::Friend {
         pub_key: payload.pub_key,
+        is_active: false,
         name: payload.name,
         key_send: ChaCha20Poly1305::new(dummy_key.as_ref().into()),
         key_recv: ChaCha20Poly1305::new(dummy_key.as_ref().into()),
         sam: Arc::new(std::sync::Mutex::new(crate::sam::sam::SAM::new(&conf.host_sam, conf.port_sam))),
         messages: Vec::new(),
         send_count: 0,
+        key_exchanged: false,
         recv_count: 0,
     });
 
