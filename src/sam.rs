@@ -173,7 +173,7 @@ impl SAM {
             Ok(_) => Ok(buf),
             Err(e) => {
                 self.is_active = false;
-                eprintln!("read error (expected {} bytes): {:?}", len, e);
+                //eprintln!("read error (expected {} bytes): {:?}", len, e);
                 Err(e)
             }
         }
