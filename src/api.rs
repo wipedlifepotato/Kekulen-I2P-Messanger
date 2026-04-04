@@ -6,7 +6,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use crate::kekulenprot::Protocol;
-use crate::config::config::AppConfig; // Исправлено: добавлена ;
+use crate::config::config::AppConfig; 
 
 #[derive(Deserialize)]
 pub struct AddFriendRequest {
@@ -52,7 +52,6 @@ impl ApiServer {
     }
 }
 
-// --- Обработчики (Handlers) ---
 async fn get_my_info(
     State(protocol): State<Arc<Protocol>>,
 ) -> Json<serde_json::Value> {
@@ -60,7 +59,7 @@ async fn get_my_info(
         "pub_key": protocol.get_my_public_key()
     }))
 }
-/// Получить список всех друзей
+
 async fn get_friends(
     State(protocol): State<Arc<Protocol>>,
 ) -> Json<Vec<FriendResponse>> {
@@ -77,7 +76,6 @@ async fn get_friends(
     Json(response)
 }
 
-/// Добавить нового друга в список для дозвона
 async fn add_friend(
     State(protocol): State<Arc<Protocol>>,
     Json(payload): Json<AddFriendRequest>,
@@ -89,7 +87,6 @@ async fn add_friend(
         return Json(serde_json::json!({ "status": "error", "message": "Friend already exists" }));
     }
 
-    // Загружаем настройки SAM из конфига
     let conf = AppConfig::load();
     
     use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
@@ -111,7 +108,6 @@ async fn add_friend(
     Json(serde_json::json!({ "status": "ok", "message": "Friend added" }))
 }
 
-/// Получить историю сообщений конкретного друга
 async fn get_messages(
     State(protocol): State<Arc<Protocol>>,
     Path(pub_key): Path<String>,
@@ -129,7 +125,6 @@ async fn get_messages(
     }
 }
 
-/// Отправить сообщение через I2P
 async fn send_message(
     State(protocol): State<Arc<Protocol>>,
     Path(pub_key): Path<String>,

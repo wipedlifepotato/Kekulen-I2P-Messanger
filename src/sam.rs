@@ -351,9 +351,6 @@ impl SAM {
                 // or expect just
             }
         };
-   //     let _= stream.
-   //         set_write_timeout(Some(DEFAULT_TIMEOUT_SOCKET));
-   //     let _= stream.set_read_timeout(Some(DEFAULT_TIMEOUT_SOCKET));
 
         if stream.write(HANDSHAKE_MESSAGE.as_bytes()).expect("Can't write to socket") != HANDSHAKE_MESSAGE.len() {
             todo!("is not active socket for a now");
