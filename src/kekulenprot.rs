@@ -1,15 +1,15 @@
+use std::convert::TryInto;
 use std::sync::{Arc, Mutex};
 use std::{thread, time};
-use std::convert::TryInto;
 
+use chacha20poly1305::{ChaCha20Poly1305, Key, KeyInit, Nonce, aead::Aead};
+use hkdf::Hkdf;
+use libcrux_ml_kem::mlkem768;
 use rand::prelude::*;
 use sha2::Sha256;
-use hkdf::Hkdf;
-use chacha20poly1305::{ChaCha20Poly1305, Key, KeyInit, Nonce, aead::Aead};
-use libcrux_ml_kem::{mlkem768};
 
-use crate::sam::sam::*;
 use crate::config::config::AppConfig;
+use crate::sam::sam::*;
 
 struct SamSession {
     session: SAM,
@@ -32,17 +32,21 @@ impl SamSession {
         if !password.is_empty() {
             kp.set_password(password);
         }
-        
-        kp.load_from_file(dat_file).expect("Can't read dat_file, check your password");
+
+        kp.load_from_file(dat_file)
+            .expect("Can't read dat_file, check your password");
         dbg!(&kp);
         let conf = AppConfig::load();
         let mut sam = SAM::new(conf.host_sam.as_str(), conf.port_sam);
         sam.set_keypair(kp.clone());
         sam.set_nickname(dat_file);
         sam.create_session(dat_file);
-        
+
         dbg!(&sam);
-        Self { session: sam, key_pair: kp }            
+        Self {
+            session: sam,
+            key_pair: kp,
+        }
     }
 
     pub fn new(dat_file: &str, password: &str, key_type: u8) -> Self {
@@ -62,7 +66,10 @@ impl SamSession {
         sam.create_session(dat_file);
         sam.set_nickname(dat_file);
         kp.save_to_file(dat_file).expect("Can't save your keypair");
-        Self { session: sam, key_pair: kp }
+        Self {
+            session: sam,
+            key_pair: kp,
+        }
     }
 }
 
@@ -72,7 +79,7 @@ pub struct Friend {
     pub name: String,
     pub key_send: ChaCha20Poly1305,
     pub key_recv: ChaCha20Poly1305,
-    pub sam: Arc<Mutex<SAM>>, 
+    pub sam: Arc<Mutex<SAM>>,
     pub messages: Vec<String>,
     pub send_count: u64,
     pub recv_count: u64,
@@ -92,8 +99,7 @@ impl Friend {
         match self.key_send.encrypt(nonce, message.as_bytes()) {
             Ok(ciphertext) => {
                 let msg_len = (ciphertext.len() as u32).to_le_bytes();
-                
-                // Собираем длину и сообщение в один пакет, чтобы избежать фрагментации
+
                 let mut payload = Vec::with_capacity(4 + ciphertext.len());
                 payload.extend_from_slice(&msg_len);
                 payload.extend_from_slice(&ciphertext);
@@ -118,18 +124,69 @@ pub struct Protocol {
 impl Protocol {
     pub fn create_profile(dat_file: &str, password: &str, key_type: u8) -> Self {
         let s = SamSession::new(dat_file, password, key_type);
-        Self { 
-            session: Arc::new(Mutex::new(s)), 
-            friends: Arc::new(Mutex::new(Vec::new())), 
+        Self {
+            session: Arc::new(Mutex::new(s)),
+            friends: Arc::new(Mutex::new(Vec::new())),
         }
     }
+    pub fn add_pending_friend(&self, name: &str, pub_key: &str) {
+        let mut friends = self.friends.lock().unwrap();
 
+        let dummy_key = [0u8; 32];
+
+        let dummy_cipher = ChaCha20Poly1305::new(Key::from_slice(&dummy_key));
+
+        let conf = AppConfig::load();
+
+        friends.push(Friend {
+            pub_key: pub_key.to_string(),
+            name: name.to_string(),
+            key_send: dummy_cipher.clone(),
+            key_recv: dummy_cipher,
+            sam: Arc::new(std::sync::Mutex::new(crate::sam::sam::SAM::new(
+                &conf.host_sam,
+                conf.port_sam,
+            ))),
+            messages: Vec::new(),
+            send_count: 0,
+            recv_count: 0,
+            is_active: false,
+            key_exchanged: false,
+        });
+    }
+    fn reset_friend_active(friends_ptr: &Arc<Mutex<Vec<Friend>>>, pub_key: &str) {
+        if let Ok(mut friends) = friends_ptr.lock() {
+            if let Some(index) = friends.iter().position(|f| f.pub_key == pub_key) {
+                let old_name = friends[index].name.clone();
+                let dummy_key = [0u8; 32];
+
+                let dummy_cipher = ChaCha20Poly1305::new(Key::from_slice(&dummy_key));
+                friends.remove(index);
+                let conf = AppConfig::load();
+                friends.push(Friend {
+                    pub_key: pub_key.to_string(),
+                    name: old_name,
+                    key_send: dummy_cipher.clone(),
+                    key_recv: dummy_cipher.clone(),
+                    sam: Arc::new(std::sync::Mutex::new(crate::sam::sam::SAM::new(
+                        &conf.host_sam,
+                        conf.port_sam,
+                    ))),
+                    messages: Vec::new(),
+                    send_count: 0,
+                    recv_count: 0,
+                    is_active: false,
+                    key_exchanged: false,
+                });
+            }
+        }
+    }
     pub fn load_profile(dat_file: &str, password: &str) -> Self {
         dbg!("load profile", dat_file);
         let s = SamSession::import(dat_file, password);
-        Self { 
-            session: Arc::new(Mutex::new(s)), 
-            friends: Arc::new(Mutex::new(Vec::new())), 
+        Self {
+            session: Arc::new(Mutex::new(s)),
+            friends: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -140,7 +197,7 @@ impl Protocol {
     pub fn connect_thread(&self) {
         let session_ptr = Arc::clone(&self.session);
         let friends_ptr = Arc::clone(&self.friends);
-        
+
         let my_pub_key = self.get_my_public_key();
 
         dbg!("start connect thread");
@@ -149,9 +206,9 @@ impl Protocol {
                 let targets: Vec<String> = {
                     let mut f = friends_ptr.lock().unwrap();
                     f.iter_mut()
-                        .filter(|f| !f.is_active) 
+                        .filter(|f| !f.is_active)
                         .map(|f| {
-                            f.is_active = true; 
+                            f.is_active = true;
                             f.pub_key.clone()
                         })
                         .collect()
@@ -168,9 +225,8 @@ impl Protocol {
 
                         let mut sam = SAM::new(&conf.host_sam, conf.port_sam);
                         sam.set_nickname(&nickname);
-                        
+
                         if sam.connect(&pub_key) {
-                            // ИДЕНТИФИКАЦИЯ: Отправляем свой ключ, чтобы Боб мог его считать через read_line_manual
                             let id_packet = format!("{}\n", my_pk);
                             if sam.write_bytes(id_packet.as_bytes()).is_err() {
                                 reset_friend_active(&f_ptr, &pub_key);
@@ -197,7 +253,7 @@ impl Protocol {
                             let ct = mlkem768::MlKem768Ciphertext::from(ct_array);
 
                             let shared_secret = mlkem768::decapsulate(key_pair.private_key(), &ct);
-                            
+
                             let hk = Hkdf::<Sha256>::new(None, shared_secret.as_slice());
                             let mut s_k = [0u8; 32];
                             let mut r_k = [0u8; 32];
@@ -206,7 +262,7 @@ impl Protocol {
 
                             let send_cipher = ChaCha20Poly1305::new(Key::from_slice(&s_k));
                             let recv_cipher = ChaCha20Poly1305::new(Key::from_slice(&r_k));
-                            
+
                             let shared_sam = Arc::new(Mutex::new(sam));
 
                             {
@@ -243,8 +299,8 @@ impl Protocol {
                 Err(e) => {
                     f.is_active = false;
                     Err(e)
-                },
-                Ok(()) => Ok(())
+                }
+                Ok(()) => Ok(()),
             }
         } else {
             Err("Friend not found".into())
@@ -263,24 +319,27 @@ impl Protocol {
                 let mut sam = SAM::new(&conf.host_sam, conf.port_sam);
                 sam.set_nickname(&nickname);
                 dbg!("wait accept");
-                
+
                 if sam.accept() {
                     let f_ptr = Arc::clone(&friends_ptr);
                     thread::spawn(move || {
                         let remote_pub_key = read_line_manual(&mut sam);
-                        if remote_pub_key.is_empty() { return; }
+                        if remote_pub_key.is_empty() {
+                            return;
+                        }
 
                         let pk_bytes = match sam.read_bytes(1184) {
                             Ok(b) if b.len() == 1184 => b,
                             _ => return,
                         };
-                        
-                        let pk = mlkem768::MlKem768PublicKey::try_from(pk_bytes.as_slice()).unwrap();
+
+                        let pk =
+                            mlkem768::MlKem768PublicKey::try_from(pk_bytes.as_slice()).unwrap();
 
                         let mut entropy = [0u8; 32];
                         thread_rng().fill_bytes(&mut entropy);
                         let (ct, shared_secret) = mlkem768::encapsulate(&pk, entropy);
-                        
+
                         if sam.write_bytes(ct.as_slice()).is_err() {
                             return;
                         }
@@ -298,7 +357,9 @@ impl Protocol {
 
                         {
                             let mut friends = f_ptr.lock().unwrap();
-                            if let Some(f) = friends.iter_mut().find(|f| f.pub_key == remote_pub_key) {
+                            if let Some(f) =
+                                friends.iter_mut().find(|f| f.pub_key == remote_pub_key)
+                            {
                                 f.sam = Arc::clone(&shared_sam);
                                 f.key_send = send_cipher.clone();
                                 f.key_recv = recv_cipher.clone();
@@ -314,7 +375,7 @@ impl Protocol {
                                     sam: Arc::clone(&shared_sam),
                                     messages: Vec::new(),
                                     key_exchanged: true,
-                                    is_active: true, 
+                                    is_active: true,
                                     send_count: 0,
                                     recv_count: 0,
                                 });
@@ -333,6 +394,7 @@ fn reset_friend_active(friends_ptr: &Arc<Mutex<Vec<Friend>>>, pub_key: &str) {
     if let Ok(mut friends) = friends_ptr.lock() {
         if let Some(f) = friends.iter_mut().find(|f| f.pub_key == pub_key) {
             f.is_active = false;
+            f.key_exchanged = false;
         }
     }
 }
@@ -340,25 +402,35 @@ fn reset_friend_active(friends_ptr: &Arc<Mutex<Vec<Friend>>>, pub_key: &str) {
 fn read_line_manual(sam: &mut SAM) -> String {
     let mut buffer = Vec::new();
     while let Ok(b) = sam.read_bytes(1) {
-        if b.is_empty() || b[0] == 10 { break; }
+        if b.is_empty() || b[0] == 10 {
+            break;
+        }
         buffer.push(b[0]);
     }
     String::from_utf8_lossy(&buffer).trim().to_string()
 }
 
-fn listen_loop(sam: Arc<Mutex<SAM>>, recv_cipher: ChaCha20Poly1305, friends_ptr: Arc<Mutex<Vec<Friend>>>, pub_key: String) {
+fn listen_loop(
+    sam: Arc<Mutex<SAM>>,
+    recv_cipher: ChaCha20Poly1305,
+    friends_ptr: Arc<Mutex<Vec<Friend>>>,
+    pub_key: String,
+) {
     let mut nonce_counter: u64 = 0;
-    
+
     loop {
         {
             let friends = friends_ptr.lock().unwrap();
             if let Some(f) = friends.iter().find(|f| f.pub_key == pub_key) {
-                if !f.is_active { break; }
-            } else { break; }
+                if !f.is_active {
+                    break;
+                }
+            } else {
+                break;
+            }
         }
 
         let len_result = {
-            
             let mut sam_lock = sam.lock().unwrap();
             sam_lock.set_timeout(1);
             sam_lock.read_bytes(4)
@@ -367,7 +439,7 @@ fn listen_loop(sam: Arc<Mutex<SAM>>, recv_cipher: ChaCha20Poly1305, friends_ptr:
         match len_result {
             Ok(len_bytes) if len_bytes.len() == 4 => {
                 let msg_len = u32::from_le_bytes(len_bytes.try_into().unwrap()) as usize;
-                
+
                 let enc_result = {
                     let mut sam_lock = sam.lock().unwrap();
                     sam_lock.read_bytes(msg_len)
@@ -383,7 +455,9 @@ fn listen_loop(sam: Arc<Mutex<SAM>>, recv_cipher: ChaCha20Poly1305, friends_ptr:
                             Ok(plaintext) => {
                                 if let Ok(msg) = String::from_utf8(plaintext) {
                                     let mut friends = friends_ptr.lock().unwrap();
-                                    if let Some(f) = friends.iter_mut().find(|f| f.pub_key == pub_key) {
+                                    if let Some(f) =
+                                        friends.iter_mut().find(|f| f.pub_key == pub_key)
+                                    {
                                         f.messages.push(msg);
                                         f.recv_count += 1;
                                     }

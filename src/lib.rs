@@ -1,15 +1,15 @@
+use jni::JNIEnv;
 use jni::objects::{JClass, JString};
 use jni::sys::jstring;
-use jni::JNIEnv; 
 use std::sync::{Arc, OnceLock};
 
-pub mod sam;
+mod api;
 pub mod config;
 pub mod kekulenprot;
-mod api;
+pub mod sam;
 
-use crate::kekulenprot::Protocol;
 use crate::api::*;
+use crate::kekulenprot::Protocol;
 
 static PROTOCOL: OnceLock<Arc<Protocol>> = OnceLock::new();
 
@@ -25,15 +25,15 @@ pub extern "system" fn Java_com_kekulen_app_ProtocolBridge_initProtocol(
 
     let proto = Protocol::load_profile(&dat, &password);
     let proto_arc: Arc<Protocol> = Arc::new(proto);
-    
+
     let p_clone = Arc::clone(&proto_arc);
-    std::thread::spawn(move || { 
-        p_clone.accept_thread(); 
+    std::thread::spawn(move || {
+        p_clone.accept_thread();
     });
-    
+
     let p_clone2 = Arc::clone(&proto_arc);
-    std::thread::spawn(move || { 
-        p_clone2.connect_thread(); 
+    std::thread::spawn(move || {
+        p_clone2.connect_thread();
     });
 
     let p_clone3 = Arc::clone(&proto_arc);
@@ -45,7 +45,6 @@ pub extern "system" fn Java_com_kekulen_app_ProtocolBridge_initProtocol(
         });
     });
     let _ = PROTOCOL.set(proto_arc);
-
 }
 
 #[unsafe(no_mangle)]

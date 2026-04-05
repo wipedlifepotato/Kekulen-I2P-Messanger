@@ -1,8 +1,8 @@
 pub mod config {
+    use directories::ProjectDirs;
     use serde::{Deserialize, Serialize};
     use std::fs;
     use std::path::PathBuf;
-    use directories::ProjectDirs;
 
     #[derive(Debug, Serialize, Deserialize)]
     pub struct AppConfig {
@@ -24,7 +24,7 @@ pub mod config {
         #[arg(long, default_value = "password")]
         pub password: String,
 
-        #[arg(long, short, default_value = "tui")]
+        #[arg(long, short, default_value_t = false)]
         pub run_tui: bool,
     }
     impl AppConfig {
@@ -37,7 +37,7 @@ pub mod config {
         }
         pub fn load() -> Self {
             let args = Args::parse();
-            return Self::new(&args.config);            
+            return Self::new(&args.config);
         }
         pub fn new(path: &str) -> Self {
             if !fs::metadata(path).is_ok() {
@@ -45,7 +45,8 @@ pub mod config {
                     host_sam: "127.0.0.1".to_string(),
                     port_sam: 7656,
                 };
-                let yaml = serde_yaml::to_string(&default_config).expect("Can't create default YAML");
+                let yaml =
+                    serde_yaml::to_string(&default_config).expect("Can't create default YAML");
                 fs::write(path, yaml).expect("Can't write default config file");
             }
 

@@ -1,15 +1,15 @@
+use crate::config::config::AppConfig;
+use crate::kekulenprot::Protocol;
 use axum::{
+    Json, Router,
     extract::{Path, State},
     routing::{get, post},
-    Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use crate::kekulenprot::Protocol;
-use crate::config::config::AppConfig; 
+use tower_http::services::ServeDir;
 use utoipa::{OpenApi, ToSchema};
 use utoipa_swagger_ui::SwaggerUi;
-use tower_http::services::ServeDir;
 
 #[derive(Deserialize, ToSchema)]
 pub struct AddFriendRequest {
@@ -66,7 +66,6 @@ impl ApiServer {
     }
 
     pub async fn run(&self, port: u16) {
-        
         let api_routes = Router::new()
             .route("/friends", get(get_friends))
             .route("/friends/add", post(add_friend))
@@ -75,19 +74,18 @@ impl ApiServer {
             .route("/me", get(get_my_info))
             .with_state(self.protocol.clone());
 
-        let serve_dir = ServeDir::new("server")
-            .append_index_html_on_directories(true);
+        let serve_dir = ServeDir::new("server").append_index_html_on_directories(true);
 
         let app = Router::new()
-            .nest("/api", api_routes) 
+            .nest("/api", api_routes)
             .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()))
-            .fallback_service(serve_dir); 
-                                           
+            .fallback_service(serve_dir);
+
         let addr = format!("127.0.0.1:{}", port);
         let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
         println!("REST API started on http://{}", addr);
         println!("Swagger UI available at http://{}/swagger-ui", addr);
-        
+
         axum::serve(listener, app).await.unwrap();
     }
 }
@@ -99,9 +97,7 @@ impl ApiServer {
         (status = 200, description = "Get own public key", body = MyInfoResponse)
     )
 )]
-async fn get_my_info(
-    State(protocol): State<Arc<Protocol>>,
-) -> Json<serde_json::Value> {
+async fn get_my_info(State(protocol): State<Arc<Protocol>>) -> Json<serde_json::Value> {
     Json(serde_json::json!({
         "pub_key": protocol.get_my_public_key()
     }))
@@ -114,18 +110,19 @@ async fn get_my_info(
         (status = 200, description = "List all registered friends", body = [FriendResponse])
     )
 )]
-async fn get_friends(
-    State(protocol): State<Arc<Protocol>>,
-) -> Json<Vec<FriendResponse>> {
+async fn get_friends(State(protocol): State<Arc<Protocol>>) -> Json<Vec<FriendResponse>> {
     let friends_list_arc = protocol.get_friends_list();
     let friends_guard = friends_list_arc.lock().unwrap();
-    
-    let response = friends_guard.iter().map(|f| FriendResponse {
-        pub_key: f.pub_key.clone(),
-        name: f.name.clone(),
-        messages: f.messages.clone(),
-        send_count: f.send_count,
-    }).collect();
+
+    let response = friends_guard
+        .iter()
+        .map(|f| FriendResponse {
+            pub_key: f.pub_key.clone(),
+            name: f.name.clone(),
+            messages: f.messages.clone(),
+            send_count: f.send_count,
+        })
+        .collect();
 
     Json(response)
 }
@@ -144,23 +141,26 @@ async fn add_friend(
 ) -> Json<serde_json::Value> {
     let friends_list_arc = protocol.get_friends_list();
     let mut friends = friends_list_arc.lock().unwrap();
-    
+
     if friends.iter().any(|f| f.pub_key == payload.pub_key) {
         return Json(serde_json::json!({ "status": "error", "message": "Friend already exists" }));
     }
 
     let conf = AppConfig::load();
-    
+
     use chacha20poly1305::{ChaCha20Poly1305, KeyInit};
     let dummy_key = [0u8; 32];
-    
+
     friends.push(crate::kekulenprot::Friend {
         pub_key: payload.pub_key,
         is_active: false,
         name: payload.name,
         key_send: ChaCha20Poly1305::new(dummy_key.as_ref().into()),
         key_recv: ChaCha20Poly1305::new(dummy_key.as_ref().into()),
-        sam: Arc::new(std::sync::Mutex::new(crate::sam::sam::SAM::new(&conf.host_sam, conf.port_sam))),
+        sam: Arc::new(std::sync::Mutex::new(crate::sam::sam::SAM::new(
+            &conf.host_sam,
+            conf.port_sam,
+        ))),
         messages: Vec::new(),
         send_count: 0,
         key_exchanged: false,
@@ -186,7 +186,7 @@ async fn get_messages(
 ) -> Json<serde_json::Value> {
     let friends_list_arc = protocol.get_friends_list();
     let friends = friends_list_arc.lock().unwrap();
-    
+
     if let Some(f) = friends.iter().find(|f| f.pub_key == pub_key) {
         Json(serde_json::json!({
             "name": f.name,
