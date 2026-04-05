@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  kekulen-service:
+    build: .
+    container_name: kekulen-app
+    ports:
+      - "8585:8080"
+      - "7474:7070"   
+    volumes:
+      - ./data:/app/data
+      - ./entrypoint.sh:/usr/local/bin/entrypoint.sh
+    restart: unless-stopped
+    entrypoint: /usr/local/bin/entrypoint.sh
