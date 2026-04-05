@@ -47,3 +47,10 @@ external fun sendMessage(pubKey: String, message: String): String
 
 ## webui
 near your executable file create directory "server", and put there index.html, that you can get in repository, after on webui port will be webui. there is not will be xss, but if you paranoid exists tui version
+
+## Docker
+
+1. docker-compose up -d --build
+2. docker ps
+3. docker logs -f ID, wait when starts. i2pd installs automatically 
+4. open though browser on 127.0.0.1:8585. If you not need listen on 0.0.0.0 then edit docker-compose.yml ports

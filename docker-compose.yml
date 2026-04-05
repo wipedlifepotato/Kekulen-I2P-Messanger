@@ -5,8 +5,8 @@ services:
     container_name: kekulen-app
     ports:
       #- "8585:8585"
-      - "7474:7070"   
-      - "8585:9999"
+      - "127.0.0.1:7474:7070"   
+      - "127.0.0.1:8585:9999"
     volumes:
       - ./data:/app/data
       - ./entrypoint.sh:/usr/local/bin/entrypoint.sh
