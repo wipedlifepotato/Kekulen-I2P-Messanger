@@ -17,6 +17,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          - os: macos-latest
+            artifact_name: kekulen-ios
+            target: aarch64-apple-ios
+            binary_name: kekulen
+            is_ios: true
           - os: ubuntu-latest
             artifact_name: kekulen-linux
             binary_name: kekulen
@@ -54,9 +59,13 @@ jobs:
           rustup target add ${{ matrix.target }}
           cargo install cargo-ndk
           cargo ndk -t ${{ matrix.target }} build --release
-
+      - name: Build iOS
+        if: matrix.is_ios == true
+        run: |
+          rustup target add ${{ matrix.target }}
+          cargo build --release --target ${{ matrix.target }}
       - name: Build Release (PC)
-        if: matrix.is_android == false
+        if: matrix.is_android == false && matrix.is_ios == false
         run: cargo build --release
 
       - name: Upload Binary Artifact
