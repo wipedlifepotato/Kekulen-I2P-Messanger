@@ -23,6 +23,9 @@ pub mod config {
 
         #[arg(long, default_value = "password")]
         pub password: String,
+
+        #[arg(long, short, default_value = "tui")]
+        pub run_tui: bool,
     }
     impl AppConfig {
         pub fn is_exists(path: &str) -> bool {

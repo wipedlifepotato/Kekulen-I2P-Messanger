@@ -65,7 +65,7 @@ impl ApiServer {
         Self { protocol }
     }
 
-    pub async fn run(self, port: u16) {
+    pub async fn run(&self, port: u16) {
         
         let api_routes = Router::new()
             .route("/friends", get(get_friends))
@@ -73,7 +73,7 @@ impl ApiServer {
             .route("/messages/{pub_key}", get(get_messages))
             .route("/send/{pub_key}", post(send_message))
             .route("/me", get(get_my_info))
-            .with_state(self.protocol);
+            .with_state(self.protocol.clone());
 
         let serve_dir = ServeDir::new("server")
             .append_index_html_on_directories(true);

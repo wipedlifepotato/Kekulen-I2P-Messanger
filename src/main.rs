@@ -36,6 +36,10 @@ async fn main() {
     protocol.connect_thread();
     protocol.accept_thread();
 
-    let server = api::ApiServer::new(Arc::clone(&protocol));
-    server.run(args.port).await;
+    if args.run_tui {
+        tui::run(&protocol);
+    } else {
+        let server = Arc::new( api::ApiServer::new(Arc::clone(&protocol)) );
+        server.run(args.port).await;
+    }
 }

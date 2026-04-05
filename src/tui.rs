@@ -6,6 +6,9 @@ use cursive::Cursive;
 use cursive::view::Nameable;
 use cursive::view::Resizable;
 use std::fs;
+use crate::kekulenprot::Protocol;
+use std::sync::Arc;
+
 
 struct Friend {
     name: String,
@@ -87,7 +90,7 @@ fn InitMessenger( s: &mut Cursive, keyPair: KeyPair ) {
     );
 }
 
-pub fn run() {
+pub fn run(protocol: &Arc<Protocol>) {
     let mut siv = cursive::default();
     let dir = KeyPair::get_app_dir();
 
