@@ -19,5 +19,5 @@ while ! nc -z 127.0.0.1 7656; do
 done
 
 echo "SAM bridge is UP! Starting Kekulen..."
-
+socat TCP-LISTEN:9999,fork,reuseaddr TCP:127.0.0.1:8080 &
 exec /usr/local/bin/kekulen "$@"

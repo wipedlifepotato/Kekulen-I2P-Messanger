@@ -13,7 +13,7 @@ RUN cargo build --release
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y \
-    libssl3 \
+    libssl3 curl  socat \
     ca-certificates i2pd netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
@@ -26,4 +26,4 @@ COPY --from=builder /app/target/release/kekulen /usr/local/bin/kekulen
 COPY --from=builder /app/server ./server
 
 ENTRYPOINT ["entrypoint.sh"]
-CMD ["-p", "8585", "-d", "/app/data/my.dat", "--password", "password"]
+CMD ["--port", "8080", "-d", "/app/data/my.dat", "--password", "password"]
