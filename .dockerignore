@@ -1,0 +1,5 @@
+target/
+.git/
+*.tar
+android-ndk-*/
+*.so
