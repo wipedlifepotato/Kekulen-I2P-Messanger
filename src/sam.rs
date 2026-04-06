@@ -39,7 +39,7 @@ pub mod sam {
         iv: [u8; 12],
     }
     use argon2::Argon2;
-    #[cfg(not(target_os = "android"))]
+    #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
     use mid;
     impl KeyPair {
         pub fn new(public: String, private: String) -> Self {
@@ -71,7 +71,7 @@ pub mod sam {
             self.public.clone()
         }
         pub fn set_password(&mut self, password: &str) {
-            #[cfg(not(target_os = "android"))]
+            #[cfg(not(any(target_os = "android", target_os = "freebsd")))]
             let mid_data = mid::get(password).unwrap_or_else(|_| {
                 let user = std::env::var("USER")
                     .or_else(|_| std::env::var("USERNAME"))
@@ -83,6 +83,8 @@ pub mod sam {
             });
 
             #[cfg(target_os = "android")]
+            let mid_data = format!("android-{}", password);
+		 #[cfg(target_os = "freebsd")]
             let mid_data = format!("android-{}", password);
 
             let mut output_key_material = [0u8; 32];
