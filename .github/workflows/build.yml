@@ -17,56 +17,102 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # --- Apple / iOS ---
           - os: macos-latest
             artifact_name: kekulen-ios
             target: aarch64-apple-ios
             binary_name: kekulen
             is_ios: true
-          - os: ubuntu-latest
-            artifact_name: kekulen-linux
-            binary_name: kekulen
-            is_android: false
-          - os: windows-latest
-            artifact_name: kekulen-windows
-            binary_name: kekulen.exe
-            is_android: false
           - os: macos-latest
             artifact_name: kekulen-macos
             binary_name: kekulen
-            is_android: false
+
+          # --- Android ---
           - os: ubuntu-latest
             artifact_name: kekulen-android
             target: aarch64-linux-android
             binary_name: kekulen
             is_android: true
 
+          # --- Linux (64 & 32 bit) ---
+          - os: ubuntu-latest
+            artifact_name: kekulen-linux-x64
+            binary_name: kekulen
+          - os: ubuntu-latest
+            artifact_name: kekulen-linux-i686
+            target: i686-unknown-linux-gnu
+            binary_name: kekulen
+
+          # --- Windows (64 & 32 bit / XP) ---
+          - os: windows-latest
+            artifact_name: kekulen-windows-x64
+            binary_name: kekulen.exe
+          - os: windows-latest
+            artifact_name: kekulen-windows-xp-i686
+            target: i686-pc-windows-msvc
+            binary_name: kekulen.exe
+            is_xp: true
+
+          # --- FreeBSD ---
+          - os: ubuntu-latest
+            artifact_name: kekulen-freebsd-x64
+            binary_name: kekulen
+            is_freebsd: true
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust toolchain
+        if: matrix.is_freebsd != true
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target || '' }}
 
       - name: Rust Cache
+        if: matrix.is_freebsd != true
         uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build FreeBSD
+        if: matrix.is_freebsd == true
+        uses: vmactions/freebsd-vm@v1
+        with:
+          usesh: true
+          prepare: pkg install -y rust
+          run: cargo build --release
 
       - name: Build Android
         if: matrix.is_android == true
         run: |
           export ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/$(ls $ANDROID_SDK_ROOT/ndk | head -1)
-          echo "Using NDK at: $ANDROID_NDK_HOME"
-          rustup target add ${{ matrix.target }}
           cargo install cargo-ndk
           cargo ndk -t ${{ matrix.target }} build --release
+
       - name: Build iOS
         if: matrix.is_ios == true
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Build Windows XP
+        if: matrix.is_xp == true
         run: |
-          rustup target add ${{ matrix.target }}
+          $env:RUSTFLAGS = "-C target-feature=+crt-static -C link-args=/SUBSYSTEM:CONSOLE,5.01"
           cargo build --release --target ${{ matrix.target }}
+        shell: pwsh
+
       - name: Build Release (PC)
-        if: matrix.is_android == false && matrix.is_ios == false
-        run: cargo build --release
+        if: matrix.is_android != true && matrix.is_ios != true && matrix.is_freebsd != true && matrix.is_xp != true
+        run: |
+          if [ "${{ matrix.target }}" == "i686-unknown-linux-gnu" ]; then
+            sudo apt-get update && sudo apt-get install -y gcc-multilib
+          fi
+          
+          if [ "${{ matrix.target }}" != "" ]; then
+            cargo build --release --target ${{ matrix.target }}
+          else
+            cargo build --release
+          fi
+        shell: bash
 
       - name: Upload Binary Artifact
         uses: actions/upload-artifact@v4
