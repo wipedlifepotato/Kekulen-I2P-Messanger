@@ -103,6 +103,7 @@ fun KekulenApp() {
             try {
                 val conn = URL("http://127.0.0.1:8080/api/send/$chat").openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
+		conn.setRequestProperty("Content-Type", "application/json")
                 conn.doOutput = true
                 conn.outputStream.write(JSONObject().put("message", text).toString().toByteArray())
                 conn.responseCode
@@ -118,8 +119,10 @@ fun KekulenApp() {
             try {
                 val conn = URL("http://127.0.0.1:8080/api/friends/add").openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
-                conn.doOutput = true
+		conn.setRequestProperty("Content-Type", "application/json")
+		conn.doOutput = true
                 val body = JSONObject().put("name", newFriendName).put("pub_key", newFriendKey).toString()
+
                 conn.outputStream.write(body.toByteArray())
                 conn.responseCode
                 withContext(Dispatchers.Main) {

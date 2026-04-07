@@ -37,6 +37,9 @@ companion object {
 external fun initProtocol(datFile: String, pass: String)
 external fun sendMessage(pubKey: String, message: String): String
 
+or assets/AndroidExampleApp/Kekulen
+./gradlew assembleDebug
+after install though adb
 
 ```
 
