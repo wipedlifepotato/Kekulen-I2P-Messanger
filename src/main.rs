@@ -1,5 +1,6 @@
 use clap::Parser;
 use std::sync::Arc;
+use std::panic;
 
 mod api;
 mod config;
@@ -15,6 +16,20 @@ use std::path::PathBuf;
 
 #[tokio::main]
 async fn main() {
+std::panic::set_hook(Box::new(|panic_info| {
+    let payload = panic_info.payload();
+    let msg = if let Some(s) = payload.downcast_ref::<&str>() {
+            *s
+        } else if let Some(s) = payload.downcast_ref::<String>() {
+            s.as_str()
+        } else {
+            "Unknown error"
+        };
+        
+        eprintln!("Critical error (Panic) (check your SAM-bridge, config.yaml). You are should use I2P/I2Pd with open SAM-port: {}", msg);
+        std::process::exit(0); 
+    }));
+
     let args = Args::parse();
     let app_dir = AppConfig::get_app_dir();
 
